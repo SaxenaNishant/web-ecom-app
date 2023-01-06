@@ -1,0 +1,36 @@
+﻿.aximgareaselect-border1 {
+    background: url('images/border-anim-v.gif') repeat-y left top;
+}
+
+.aximgareaselect-border2 {
+    background: url('images/border-anim-h.gif') repeat-x left top;
+}
+
+.aximgareaselect-border3 {
+    background: url('images/border-anim-v.gif') repeat-y right top;
+}
+
+.aximgareaselect-border4 {
+    background: url('images/border-anim-h.gif') repeat-x left bottom;
+    
+}
+
+.aximgareaselect-border1, .aximgareaselect-border2, .aximgareaselect-border3, .aximgareaselect-border4 {
+    filter: alpha(opacity=50);
+    opacity: 0.5;
+}
+
+.aximgareaselect-handle {
+    background-color: #fff;
+    border: solid 1px #000000;
+    filter: alpha(opacity=50);
+    opacity: 0.5;
+}
+
+.aximgareaselect-outer {
+    background-color: #000000;
+    filter: alpha(opacity=50);
+    opacity: 0.5;
+}
+
+.aximgareaselect-selection { }

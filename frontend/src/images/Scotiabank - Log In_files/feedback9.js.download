@@ -1,0 +1,378 @@
+//For public functions (used by manage page and axplayer)
+var feedback = {};
+
+(function () {
+
+    // Run when the document is ready
+    $(document).ready(function () {
+        $('<link>').appendTo('head').attr({
+            rel: 'stylesheet',
+            type: 'text/css',
+            href: '/Content/plugins/feedback/styles/feedback9.css'
+        });
+
+        $axure.utils.loadCSS('/Content/plugins/axImgAreaSelect/styles/axImgAreaSelect.css');
+
+        var isExpo = false;
+        var sitemapPluginGid = 1;
+        var feedbackPluginGid = 4;
+        var displayPinsVariable = "dp";
+
+        function getFragmentVariable(variable) {
+            var query = window.location.hash.substring(1);
+            var vars = query.split("&");
+            for (var i = 0; i < vars.length; i++) {
+                var pair = vars[i].split("=");
+                if (pair[0] == variable) {
+                    return pair[1];
+                }
+            }
+            return "";
+        };
+
+        function feedbackOpened() {
+            return $("#interfaceControlFrame [pluginid='feedbackHost']").hasClass('selected');
+        }
+
+        function feedbackAnimated() {
+            return $("#feedbackHost:animated").length != 0;
+        }
+
+        // Checks if a given position is visible and within the given scroll container
+        // static container contains scale container and scale container contains scroll container
+        function checkIfPositionWithinScrollView(position, $scrollContainer, $staticContainer, scale) {
+            var top = $scrollContainer.scrollTop();
+            var bottom = top + ($staticContainer == null ? $scrollContainer.height() : $staticContainer.height() / scale);
+            var left = $scrollContainer.scrollLeft();
+            var right = left + ($staticContainer == null ? $scrollContainer.width() : $staticContainer.width() / scale);
+
+            var elementLeft = position.x;
+            var elementTop = position.y;
+
+            return (((top <= elementTop) && (bottom >= elementTop)) && ((left <= elementLeft) && (right >= elementLeft)));
+        };
+
+        var displayPins = getFragmentVariable(displayPinsVariable) !== "0" ? true : false;
+        var startComment = {
+            type: getFragmentVariable("type"),
+            issueCode: getFragmentVariable("issueCode").toUpperCase(),
+            commentId: getFragmentVariable("commentId").toUpperCase()
+        };
+
+        var startCommentIsValid = (startComment.type === "issue" || startComment.type === "comment") && !!startComment.issueCode;
+
+        // Can't change url w/out refreshing page so just trick the url
+        // so when there is a refresh, the page won't jump to the discussions
+        $axure.player.setVarInCurrentUrlHash('type', '');
+        $axure.player.setVarInCurrentUrlHash('issueCode', '');
+        $axure.player.setVarInCurrentUrlHash('commentId', '');
+
+        var axFeedback;
+        var feedbackLoadedPage;
+
+        $(document).on('pluginCreated', function (_event, gid) {
+            if (gid === feedbackPluginGid) {
+
+                // open discussion panel if we have a deep link to comment
+                if (startCommentIsValid && !feedbackOpened()) {
+                    $axure.player.showPlugin(feedbackPluginGid);
+                }
+
+                if (isExpo) {
+                    $axure.page.triggerEvent('load');
+                }
+
+                // On complete loading of issues, hide the spins if the fragment variable is present
+                var showPinsOnLoad = displayPins && !$axure.player.isMobileMode();
+                $axure.player.toggleComments(showPinsOnLoad);
+
+                $('#showCommentsOption').click(function () {
+                    var isEnabled = $(this).find('.overflowOptionCheckbox').hasClass('selected');
+                    if ($axure.player.toggleComments) {
+                        $axure.player.toggleComments(!isEnabled)
+                    }
+                });
+            } else if (gid === sitemapPluginGid) {
+                if (axFeedback) {
+                    // rare case when axFeedback got initialized before sitemap did
+                    // pass sitemapHost reference inside
+                    axFeedback.addOverlayElement($('#sitemapHost')[0])
+                }
+            }
+        });
+
+        $axure.messageCenter.addMessageListener(function (event, data) {
+            if (event === "pluginVisibleChanged" && data.gid === feedbackPluginGid) {
+                axFeedback.setPanelVisible(data.visible);
+            }
+        });
+
+        $axure.player.messageCenter
+
+        $axure.page.bind('load.feedback', function () {
+            if (axFeedback) {
+                axFeedback.setPage($axure.page.id, $axure.page.shortId, $axure.page.pageName);
+            } else {
+                feedbackLoadedPage = {
+                    pageId: $axure.page.id,
+                    shortId: $axure.page.shortId,
+                    pageName: $axure.page.pageName,
+                }
+            }
+        });
+
+        AxLib.utils.retryUntilTruthy(function () {
+            // If running within a prototype, check if feedback is enabled and load the plugin if so.
+            // With expo, needs to wait for the prototype to be ready to continue
+            if (window.$axure && $axure.expo) {
+                isExpo = window.$axure.expo;
+                return $axure.expo && $axure.document.isLoaded;
+            }
+            return window.$axure && $axure.player.prototype;
+        }).then(function () {
+            var $feedbackMount = $('body');
+            var $tempWrapper = $('<div>');
+            $feedbackMount.prepend($tempWrapper);
+
+            var $clippingBounds = $('#clippingBounds');
+            var $clippingBoundsScrollContainerMount = $('#clippingBoundsScrollContainer');
+            var $mainPanel = $('#mainPanel');
+            var $mainPanelContainer = $('#mainPanelContainer');
+            var $mainFrame = $('#mainFrame');
+            var $clipFrameScroll = $('#clipFrameScroll');
+            var $topPanel = $('#topPanel');
+            var $sitemapHost = $('#sitemapHost');
+            var overlayElements = [
+                $topPanel[0],
+                $sitemapHost[0]
+            ].filter(Boolean);
+
+            var cloudModeString = getFragmentVariable(window.CLOUD_VAR_NAME);
+            var cloudMode = !!cloudModeString && cloudModeString !== "0";
+            var mobileMode = !!$axure.player.isMobileMode();
+
+            var props = {
+                baseURL: window.AXSHARE_HOST_SECURE_URL,
+                elements: {
+                    clippingBounds: $clippingBounds[0],
+                    clippingBoundsScrollContainer: $clippingBoundsScrollContainerMount[0],
+                    mainPanel: $mainPanel[0],
+                    mainPanelContainer: $mainPanelContainer[0],
+                    mainFrame: $mainFrame[0],
+                    clipFrameScroll: $clipFrameScroll[0],
+                    overlayElements: overlayElements,
+                },
+                displayPins: displayPins,
+                startComment: startCommentIsValid ? startComment : undefined,
+                isExpo: !!isExpo,
+                cloudMode: !!cloudMode,
+                mobileMode: mobileMode
+            };
+
+            var handlers = {
+                "issues-loaded": function () {
+                    $axure.messageCenter.postMessage("cloud_feedbackLoaded", {});
+                },
+
+                "update-has-new-comments": function (payload) {
+                    $axure.messageCenter.postMessage("cloud_updateHasNewComments", payload);
+                },
+
+                "page-should-change": function (payload) {
+                    var pageId = payload.pageId;
+                    var shortPageId = payload.shortPageId;
+
+                    if (isExpo) {
+                        $axure.messageCenter.postMessage("expo_selectPage", { pageId: pageId });
+                    } else {
+                        var pageUrls = [];
+                        // getPageUrlsById accept only short ids
+                        $axure.player.getPageUrlsById(shortPageId, pageUrls, undefined);
+
+                        if (pageUrls[0]) {
+                            $axure.page.navigate(pageUrls[0], true);
+                        }
+                    }
+                },
+
+                "pins-toggled": function (pinsEnabled) {
+                    $axure.messageCenter.postMessage('commentsToggle', pinsEnabled);
+                    $('#showCommentsOption .overflowOptionCheckbox').toggleClass('selected', pinsEnabled);
+                    $axure.player.setVarInCurrentUrlHash(displayPinsVariable, pinsEnabled ? '' : "0");
+                    $axure.messageCenter.postMessage('commentsToggle', pinsEnabled);
+                },
+
+                "scroll-to-pin": function (payload) {
+                    var id = payload.id;
+                    var position = payload.position;
+
+                    if (feedbackAnimated()) {
+                        axFeedback.setRewindToPinAfterPluginShow(true);
+                    }
+
+                    if (isExpo) {
+                        // VUE AND IMAGE VIEWER
+                        $axure.messageCenter.postMessage("cloud_ScrollToPin", { id, position });
+                    } else {
+                        // HTML VIEWER
+                        var $scrollContainer = $($('#mainFrame')[0].contentWindow.document);
+                        var scale = $('#mainPanelContainer').css('transform');
+                        scale = (scale == "none") ? 1 : Number(scale.substring(scale.indexOf('(') + 1, scale.indexOf(',')));
+                        // See if pin is in view, if not, scroll to pin
+                        if (!checkIfPositionWithinScrollView(position, $scrollContainer, $('#mainPanel'), scale)) {
+                            var viewHeight = $('#mainPanel').height();
+                            var viewWidth = $('#mainPanel').width();
+
+                            // Scroll scrollContainer to position
+                            $scrollContainer.scrollLeft(position.x - (viewWidth / scale / 2));
+                            $scrollContainer.scrollTop(position.y - (viewHeight / scale / 2));
+                        }
+                    }
+                },
+
+
+                "open-feedback-panel": function () {
+                    if (!feedbackOpened()) {
+                        $axure.player.showPlugin(feedbackPluginGid);
+                    }
+                },
+
+                "copy-cloud-comment-link": function (payload) {
+                    $axure.messageCenter.postMessage("cloud_copyCloudCommentLink", payload);
+                }
+            };
+
+            $axure.player.toggleComments = function (showPins) {
+                if (axFeedback) {
+                    axFeedback.togglePins(showPins);
+                }
+            };
+
+            $axure.player.toogleCommentMode = function () {
+                if (axFeedback) {
+                    axFeedback.toogleCommentMode();
+                }
+            };
+
+            $axure.player.exitCommentMode = function () {
+                if (axFeedback) {
+                    axFeedback.exitCommentMode();
+                }
+            };
+
+            feedback.navigateToIssue = function (issueCode) {
+                if (axFeedback) {
+                    axFeedback.navigateToIssue(issueCode);
+                }
+            };
+
+            axFeedback = AxLib.mount($tempWrapper[0], AxLib.AxFeedback, { props, on: handlers });
+            if (feedbackLoadedPage) {
+                axFeedback.setPage(feedbackLoadedPage.pageId, feedbackLoadedPage.shortId, feedbackLoadedPage.pageName);
+            }
+
+            feedback.updateUserAccountInfo = function () {
+                // removing utoken that is set by JS in axplayer
+                // utoken is supposed to be HttpOnly and never been set by axplayer
+                removeCookie("utoken");
+            };
+
+            feedback.setReadOnlyModeAndMessage = function (roMode, roMessage) {
+                // readOnlyMode = roMode;
+                // readOnlyMessage = roMessage;
+            };
+
+            feedback.setIsSubInstance = function () {
+                // added because axplayer.js might call this blindly
+                // but because auth is fully handled by AxLib this call is noop
+            };
+
+            $axure.messageCenter.addMessageListener(function (message, data) {
+                // HTML VIEWER
+                if (message == 'setContentScale') {
+                    let scale = data.scaleN;
+                    // duplicate axplayer underhood scale calculation of mainPanel
+                    if (data.clipToView) {
+                        var scaleVal = $('.vpScaleOption').find('.selectedRadioButton').parent().attr('val');
+                        if (scaleVal == '2' || (!MOBILE_DEVICE && scaleVal == '0')) {
+                            scale = $('#mainPanel').width() / data.viewportWidth;
+                            var hScale = ($('#mainPanel').height()) / data.viewportHeight;
+                            if (hScale < scale) scale = hScale;
+                            if (scaleVal == '0') scale = Math.min(1, scale);
+                        }
+                    }
+                    axFeedback.setScale(scale);
+                } else if (message == 'getScale') {
+                    var scaleVal = $('.vpScaleOption').find('.selectedRadioButton').parent().attr('val');
+                    axFeedback.setScaleMode(scaleVal);
+                } else if (message == 'setDeviceMode') {
+                    axFeedback.setDeviceMode(data.device);
+                }
+
+                // IMAGE VIEWER
+                else if (message == 'cloud_SetPageScale') {
+                    axFeedback.setScale(data.scale);
+                } else if (message == 'cloud_SetPagePosition') {
+                    $('#clippingBoundsScrollContainer').css({
+                        left: data.x,
+                        top: data.y,
+                    });
+                    $axure.page.x = data.x;
+                    $axure.page.y = data.y;
+                    axFeedback.setPagePosition(data.x, data.y);
+                }
+
+                // VUE VIEWER
+                else if (message == 'cloud_ExpoPlayer_ViewportPositionChanged') {
+                    $axure.page.scale = data.viewportScale;
+                    axFeedback.setScale(data.viewportScale);
+
+                    var x = data.viewportX - (data.viewportScrollLeft * data.viewportScale);
+                    var y = data.viewportY - (data.viewportScrollTop * data.viewportScale);
+                    $('#clippingBoundsScrollContainer').css({
+                        left: x,
+                        top: y,
+                    });
+                    $axure.page.x = x;
+                    $axure.page.y = y;
+                    axFeedback.setPagePosition(x, y);
+                }
+            });
+
+            // IMAGE VIEWER
+            // Emit refresh page properties after subscribe on its messages
+            $axure.messageCenter.postMessage("cloud_RefreshPageProperties", {});
+        });
+    });
+
+    function writeCookie(name, value, expires, path, domain, sameSite, secure) {
+        const cookie = [];
+        cookie.push(name + "=" + encodeURIComponent(value));
+
+        if (typeof expires === "number") {
+            cookie.push("expires=" + new Date(expires).toUTCString());
+        }
+
+        if (typeof path === "string") {
+            cookie.push("path=" + path);
+        }
+
+        if (typeof domain === "string") {
+            cookie.push("domain=" + domain);
+        }
+
+        if (typeof sameSite === "string") {
+            cookie.push("samesite=" + sameSite);
+        }
+
+        if (secure === true) {
+            cookie.push("secure");
+        }
+
+        document.cookie = cookie.join("; ");
+    }
+
+    function removeCookie(name) {
+        writeCookie(name, "", Date.now() - 86400000);
+    }
+}())

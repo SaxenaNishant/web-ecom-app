@@ -1,0 +1,51 @@
+._vue_clickaway_overlay,
+.fullscreen-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1030;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    user-select: none;
+}
+
+a {
+    text-decoration: none;
+    cursor: pointer;
+}
+
+
+button {
+    margin: 0;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: 1.5;
+    cursor: pointer;
+}
+
+#feedbackHost {
+    font-size: 13px;
+    color: #081222;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background-color: #fcfdff;
+}
+
+#feedbackHost::-webkit-scrollbar {
+    display: none;
+}
+
+#feedbackHostBtn {
+    order: 3;
+}
+
+#feedbackHostBtn a {
+    background: url(images/discussion_on.svg) no-repeat center center, linear-gradient(transparent, transparent);
+}
+
+#feedbackHostBtn a.selected, #feedbackHostBtn a.selected:hover {
+    background: url('images/discussion_off.svg') no-repeat center center, linear-gradient(transparent, transparent);
+}
+
